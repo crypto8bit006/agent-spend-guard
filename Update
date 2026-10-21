@@ -1,0 +1,66 @@
+import time
+import json
+
+class AgentSpendGuard:
+    def __init__(self):
+        # A simple append-only ledger matching Saifuro's structural requirement
+        self.decision_log = []
+        # Pre-configured rules matching real-world prop/AI mandates
+        self.mandates = {
+            "procurement_agent": {
+                "max_limit": 500.00,
+                "allowed_categories": ["SaaS", "Data", "Compute"],
+                "velocity_per_min": 5
+            }
+        }
+        self.transaction_timestamps = []
+
+    def evaluate_spend(self, agent_id, amount, category):
+        current_time = time.time()
+        
+        # Clean out timestamps older than 60 seconds to track velocity
+        self.transaction_timestamps = [t for t in self.transaction_timestamps if current_time - t < 60]
+        
+        # Pull the rule mapping
+        mandate = self.mandates.get(agent_id)
+        if not mandate:
+            return self._log_verdict("DENIED_NO_MANDATE", "Agent has no written authority.")
+
+        # Rule 1: Category Check
+        if category not in mandate["allowed_categories"]:
+            return self._log_verdict("DENIED_CATEGORY_MISMATCH", f"Category {category} not authorized.")
+
+        # Rule 2: Single Transaction Cap Check
+        if amount > mandate["max_limit"]:
+            return self._log_verdict("DENIED_LIMIT_EXCEEDED", f"Amount ${amount} exceeds cap of ${mandate['max_limit']}.")
+
+        # Rule 3: Frequency / Velocity Check
+        if len(self.transaction_timestamps) >= mandate["velocity_per_min"]:
+            return self._log_verdict("DENIED_VELOCITY_TRIPPED", "Agent is spending too fast per minute.")
+
+        # All filters passed cleanly
+        self.transaction_timestamps.append(current_time)
+        return self._log_verdict("ALLOW", "Transaction perfectly within limits.")
+
+    def _log_verdict(self, code, reason):
+        verdict = {
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "verdict_code": code,
+            "reason": reason
+        }
+        self.decision_log.append(verdict)
+        return verdict
+
+# Live verification simulation running in the sandbox environment
+if __name__ == "__main__":
+    guard = AgentSpendGuard()
+    print("--- SIMULATING SAIFURO CORE RULES ENGINE ---")
+    
+    # Test 1: Clean allowed check
+    print("Test 1 (Valid SaaS Expense):", guard.evaluate_spend("procurement_agent", 120.00, "SaaS"))
+    
+    # Test 2: Checking a blocked category rule
+    print("Test 2 (Unauthorized Category):", guard.evaluate_spend("procurement_agent", 50.00, "Marketing"))
+    
+    # Test 3: Checking a single transaction limit breach
+    print("Test 3 (Limit Breach):", guard.evaluate_spend("procurement_agent", 650.00, "Compute"))
